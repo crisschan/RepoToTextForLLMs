@@ -1,17 +1,20 @@
 import os
-from github import Github
+import gitlab
 from tqdm import tqdm
+from dotenv import load_dotenv, find_dotenv
 
-# Set your GitHub token here
-GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', 'YOUR TOKEN HERE')
+# Set your GitLab token here
+_=load_dotenv(find_dotenv())
+
+GITLAB_TOKEN = os.getenv('GITLAB_TOKEN')
 
 def get_readme_content(repo):
     """
     Retrieve the content of the README file.
     """
     try:
-        readme = repo.get_contents("README.md")
-        return readme.decoded_content.decode('utf-8')
+        readme = repo.files.get(file_path='README.md', ref='main')
+        return readme.decode().decode('utf-8')
     except:
         return "README not found."
 
@@ -20,24 +23,24 @@ def traverse_repo_iteratively(repo):
     Traverse the repository iteratively to avoid recursion limits for large repositories.
     """
     structure = ""
-    dirs_to_visit = [("", repo.get_contents(""))]
+    dirs_to_visit = [("", repo.repository_tree())]
     dirs_visited = set()
 
     while dirs_to_visit:
         path, contents = dirs_to_visit.pop()
         dirs_visited.add(path)
         for content in tqdm(contents, desc=f"Processing {path}", leave=False):
-            if content.type == "dir":
-                if content.path not in dirs_visited:
-                    structure += f"{path}/{content.name}/\n"
-                    dirs_to_visit.append((f"{path}/{content.name}", repo.get_contents(content.path)))
+            if content['type'] == "tree":
+                if content['path'] not in dirs_visited:
+                    structure += f"{path}/{content['name']}/\n"
+                    dirs_to_visit.append((f"{path}/{content['name']}", repo.repository_tree(path=content['path'])))
             else:
-                structure += f"{path}/{content.name}\n"
+                structure += f"{path}/{content['name']}\n"
     return structure
 
 def get_file_contents_iteratively(repo):
     file_contents = ""
-    dirs_to_visit = [("", repo.get_contents(""))]
+    dirs_to_visit = [("", repo.repository_tree())]
     dirs_visited = set()
     binary_extensions = [
         # Compiled executables and libraries
@@ -80,30 +83,21 @@ def get_file_contents_iteratively(repo):
         path, contents = dirs_to_visit.pop()
         dirs_visited.add(path)
         for content in tqdm(contents, desc=f"Downloading {path}", leave=False):
-            if content.type == "dir":
-                if content.path not in dirs_visited:
-                    dirs_to_visit.append((f"{path}/{content.name}", repo.get_contents(content.path)))
+            if content['type'] == "tree":
+                if content['path'] not in dirs_visited:
+                    dirs_to_visit.append((f"{path}/{content['name']}", repo.repository_tree(path=content['path'])))
             else:
                 # Check if the file extension suggests it's a binary file
-                if any(content.name.endswith(ext) for ext in binary_extensions):
-                    file_contents += f"File: {path}/{content.name}\nContent: Skipped binary file\n\n"
+                if any(content['name'].endswith(ext) for ext in binary_extensions):
+                    file_contents += f"File: {path}/{content['name']}\nContent: Skipped binary file\n\n"
                 else:
-                    file_contents += f"File: {path}/{content.name}\n"
+                    file_contents += f"File: {path}/{content['name']}\n"
                     try:
-                        if content.encoding is None or content.encoding == 'none':
-                            file_contents += "Content: Skipped due to missing encoding\n\n"
-                        else:
-                            try:
-                                decoded_content = content.decoded_content.decode('utf-8')
-                                file_contents += f"Content:\n{decoded_content}\n\n"
-                            except UnicodeDecodeError:
-                                try:
-                                    decoded_content = content.decoded_content.decode('latin-1')
-                                    file_contents += f"Content (Latin-1 Decoded):\n{decoded_content}\n\n"
-                                except UnicodeDecodeError:
-                                    file_contents += "Content: Skipped due to unsupported encoding\n\n"
-                    except (AttributeError, UnicodeDecodeError):
-                        file_contents += "Content: Skipped due to decoding error or missing decoded_content\n\n"
+                        file = repo.files.get(file_path=content['path'], ref='main')
+                        decoded_content = file.decode().decode('utf-8')
+                        file_contents += f"Content:\n{decoded_content}\n\n"
+                    except UnicodeDecodeError:
+                        file_contents += "Content: Skipped due to unsupported encoding\n\n"
     return file_contents
 
 def get_repo_contents(repo_url):
@@ -111,10 +105,10 @@ def get_repo_contents(repo_url):
     Main function to get repository contents.
     """
     repo_name = repo_url.split('/')[-1]
-    if not GITHUB_TOKEN:
-        raise ValueError("Please set the 'GITHUB_TOKEN' environment variable or the 'GITHUB_TOKEN' in the script.")
-    g = Github(GITHUB_TOKEN)
-    repo = g.get_repo(repo_url.replace('https://github.com/', ''))
+    if not GITLAB_TOKEN:
+        raise ValueError("Please set the 'GITLAB_TOKEN' environment variable or the 'GITLAB_TOKEN' in the script.")
+    gl = gitlab.Gitlab('https://gitlab.com', private_token=GITLAB_TOKEN)
+    repo = gl.projects.get(repo_url.replace('https://gitlab.com/', ''))
 
     print(f"Fetching README for: {repo_name}")
     readme_content = get_readme_content(repo)
@@ -142,7 +136,7 @@ def get_repo_contents(repo_url):
     return repo_name, instructions, readme_content, repo_structure, file_contents
 
 if __name__ == '__main__':
-    repo_url = input("Please enter the GitHub repository URL: ")
+    repo_url = input("Please enter the GitLab repository URL: ")
     try:
         repo_name, instructions, readme_content, repo_structure, file_contents = get_repo_contents(repo_url)
         output_filename = f'{repo_name}_contents.txt'

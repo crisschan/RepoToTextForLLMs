@@ -1,5 +1,5 @@
 # RepoToTextForLLMs
-
+> this repo is forked from  is forked from https://github.com/Doriandarko/RepoToTextForLLMs
 Automates the analysis of GitHub, GitLab, and local repositories specifically tailored for usage with large context LLMs. These Python scripts efficiently fetch README files, repository structure, and non-binary file contents. Additionally, they provide structured outputs complete with pre-formatted prompts to guide further analysis of the repository's content.
 
 ## Features

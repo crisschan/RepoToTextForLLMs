@@ -8,22 +8,29 @@ _=load_dotenv(find_dotenv())
 
 GITLAB_TOKEN = os.getenv('GITLAB_TOKEN')
 
-def get_readme_content(repo):
+def get_readme_content(repo, branch='master'):
     """
     Retrieve the content of the README file.
     """
-    try:
-        readme = repo.files.get(file_path='README.md', ref='main')
-        return readme.decode().decode('utf-8')
-    except:
-        return "README not found."
+    readme_variants = ['README.md', 'readme.md', 'ReadMe.md']
+    
+    for readme_name in readme_variants:
+        try:
+            readme = repo.files.get(file_path=readme_name, ref=branch)
+            return readme.decode().decode('utf-8')
+        except:
+            continue
+    
+    return "README not found."
 
 def traverse_repo_iteratively(repo):
     """
     Traverse the repository iteratively to avoid recursion limits for large repositories.
     """
+    # Get default branch
+    default_branch = repo.default_branch
     structure = ""
-    dirs_to_visit = [("", repo.repository_tree())]
+    dirs_to_visit = [("", repo.repository_tree(ref=default_branch, all=True))]
     dirs_visited = set()
 
     while dirs_to_visit:
@@ -33,14 +40,16 @@ def traverse_repo_iteratively(repo):
             if content['type'] == "tree":
                 if content['path'] not in dirs_visited:
                     structure += f"{path}/{content['name']}/\n"
-                    dirs_to_visit.append((f"{path}/{content['name']}", repo.repository_tree(path=content['path'])))
+                    dirs_to_visit.append((f"{path}/{content['name']}", repo.repository_tree(path=content['path'], all=True)))
             else:
                 structure += f"{path}/{content['name']}\n"
     return structure
 
-def get_file_contents_iteratively(repo):
+def get_file_contents_iteratively(repo,branch='master'):
+    # Get default branch
+    # default_branch = repo.default_branch
     file_contents = ""
-    dirs_to_visit = [("", repo.repository_tree())]
+    dirs_to_visit = [("", repo.repository_tree(ref=branch, all=True))]
     dirs_visited = set()
     binary_extensions = [
         # Compiled executables and libraries
@@ -85,7 +94,7 @@ def get_file_contents_iteratively(repo):
         for content in tqdm(contents, desc=f"Downloading {path}", leave=False):
             if content['type'] == "tree":
                 if content['path'] not in dirs_visited:
-                    dirs_to_visit.append((f"{path}/{content['name']}", repo.repository_tree(path=content['path'])))
+                    dirs_to_visit.append((f"{path}/{content['name']}", repo.repository_tree(path=content['path'], all=True)))
             else:
                 # Check if the file extension suggests it's a binary file
                 if any(content['name'].endswith(ext) for ext in binary_extensions):
@@ -93,52 +102,42 @@ def get_file_contents_iteratively(repo):
                 else:
                     file_contents += f"File: {path}/{content['name']}\n"
                     try:
-                        file = repo.files.get(file_path=content['path'], ref='main')
+                        file = repo.files.get(file_path=content['path'], ref=branch)
                         decoded_content = file.decode().decode('utf-8')
                         file_contents += f"Content:\n{decoded_content}\n\n"
                     except UnicodeDecodeError:
                         file_contents += "Content: Skipped due to unsupported encoding\n\n"
     return file_contents
 
-def get_repo_contents(repo_url):
+def get_repo_contents(repo_url, branch='master'):
     """
     Main function to get repository contents.
     """
     repo_name = repo_url.split('/')[-1]
     if not GITLAB_TOKEN:
-        raise ValueError("Please set the 'GITLAB_TOKEN' environment variable or the 'GITLAB_TOKEN' in the script.")
+        raise ValueError("Please set 'GITLAB_TOKEN' environment variable or in the script.")
     gl = gitlab.Gitlab('https://gitlab.com', private_token=GITLAB_TOKEN)
     repo = gl.projects.get(repo_url.replace('https://gitlab.com/', ''))
 
-    print(f"Fetching README for: {repo_name}")
-    readme_content = get_readme_content(repo)
+    print(f"Getting README for {repo_name}")
+    readme_content = get_readme_content(repo, branch)
 
-    print(f"\nFetching repository structure for: {repo_name}")
-    repo_structure = f"Repository Structure: {repo_name}\n"
+    print(f"\nGetting repository structure for {repo_name}")
+    repo_structure = f"Repository structure: {repo_name}\n"
     repo_structure += traverse_repo_iteratively(repo)
 
-    print(f"\nFetching file contents for: {repo_name}")
-    file_contents = get_file_contents_iteratively(repo)
+    print(f"\nGetting file contents for {repo_name}")
+    file_contents = get_file_contents_iteratively(repo, branch)
 
-    instructions = f"Prompt: Analyze the {repo_name} repository to understand its structure, purpose, and functionality. Follow these steps to study the codebase:\n\n"
-    instructions += "1. Read the README file to gain an overview of the project, its goals, and any setup instructions.\n\n"
-    instructions += "2. Examine the repository structure to understand how the files and directories are organized.\n\n"
-    instructions += "3. Identify the main entry point of the application (e.g., main.py, app.py, index.js) and start analyzing the code flow from there.\n\n"
-    instructions += "4. Study the dependencies and libraries used in the project to understand the external tools and frameworks being utilized.\n\n"
-    instructions += "5. Analyze the core functionality of the project by examining the key modules, classes, and functions.\n\n"
-    instructions += "6. Look for any configuration files (e.g., config.py, .env) to understand how the project is configured and what settings are available.\n\n"
-    instructions += "7. Investigate any tests or test directories to see how the project ensures code quality and handles different scenarios.\n\n"
-    instructions += "8. Review any documentation or inline comments to gather insights into the codebase and its intended behavior.\n\n"
-    instructions += "9. Identify any potential areas for improvement, optimization, or further exploration based on your analysis.\n\n"
-    instructions += "10. Provide a summary of your findings, including the project's purpose, key features, and any notable observations or recommendations.\n\n"
-    instructions += "Use the files and contents provided below to complete this analysis:\n\n"
+    instructions = "Use the following files and contents for analysis:\n\n"
 
     return repo_name, instructions, readme_content, repo_structure, file_contents
 
 if __name__ == '__main__':
-    repo_url = input("Please enter the GitLab repository URL: ")
+    repo_url = input("Please enter GitLab repository URL: ")
+    branch = input("Please enter branch name (default is master): ") or "master"
     try:
-        repo_name, instructions, readme_content, repo_structure, file_contents = get_repo_contents(repo_url)
+        repo_name, instructions, readme_content, repo_structure, file_contents = get_repo_contents(repo_url, branch)
         output_filename = f'{repo_name}_contents.txt'
         with open(output_filename, 'w', encoding='utf-8') as f:
             f.write(instructions)
@@ -146,7 +145,7 @@ if __name__ == '__main__':
             f.write(repo_structure)
             f.write('\n\n')
             f.write(file_contents)
-        print(f"Repository contents saved to '{output_filename}'.")
+        print(f"Repository contents have been saved to '{output_filename}'.")
     except ValueError as ve:
         print(f"Error: {ve}")
     except Exception as e:

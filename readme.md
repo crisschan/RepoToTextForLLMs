@@ -1,28 +1,35 @@
 # RepoToTextForLLMs
-![hero](https://cdn.discordapp.com/attachments/1047006708813271100/1216931386032656445/im.jpeg?ex=66022eab&is=65efb9ab&hm=d472a26ec77b50ce5ee094578f888fa8b6c893bc523a5633f6987a850ae3b8d8&)
 
-Automates the analysis of GitHub repositories specifically tailored for usage with large context LLMs. This Python script efficiently fetches README files, repository structure, and non-binary file contents. Additionally, it provides structured outputs complete with pre-formatted prompts to guide further analysis of the repository's content.
+Automates the analysis of GitHub, GitLab, and local repositories specifically tailored for usage with large context LLMs. These Python scripts efficiently fetch README files, repository structure, and non-binary file contents. Additionally, they provide structured outputs complete with pre-formatted prompts to guide further analysis of the repository's content.
 
 ## Features
 
-- **README Retrieval:** Automatically extracts the content of README.md to provide an initial insight into the repository.
+- **README Retrieval:** Automatically extracts the content of README.md (with multiple case variants) to provide an initial insight into the repository.
 - **Structured Repository Traversal:** Maps out the repository's structure through an iterative traversal method, ensuring thorough coverage without the limitations of recursion.
 - **Selective Content Extraction:** Retrieves text contents from files, intelligently skipping over binary files to streamline the analysis process.
+- **Multi-Platform Support:** Works with GitHub repositories, GitLab repositories, and local Git repositories.
+- **Branch Support:** Allows specifying different branches for content retrieval.
 
 ## Prerequisites
 
 To use **RepoToTextForLLMs**, you'll need:
 
-- Python installed on your system.
-- The `github` Python package.
-- A GitHub Personal Access Token configured as an environment variable (`GITHUB_TOKEN`).
+- Python installed on your system
+- Required Python packages:
+  - `PyGithub` for GitHub repositories
+  - `python-gitlab` for GitLab repositories
+  - `tqdm` for progress bars
+  - `python-dotenv` for environment variable management
+- Access tokens (for remote repositories):
+  - GitHub Personal Access Token configured as `GITHUB_TOKEN`
+  - GitLab Personal Access Token configured as `GITLAB_TOKEN`
 
 ## Getting Started
 
-1. Ensure Python and the required package (`PyGithub`) are installed:
+1. Install the required packages:
 
 ```bash
-pip install PyGithub tqdm
+pip install PyGithub python-gitlab tqdm python-dotenv
 ```
 
 2. Set your GitHub Personal Access Token as an environment variable:
